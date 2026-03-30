@@ -15,7 +15,6 @@ from mcp import types
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -26,7 +25,6 @@ SCOPES = [
 ]
 
 TOKEN_FILE = Path(os.environ.get("GOOGLE_TOKEN_FILE", Path.home() / ".google_docs_mcp_token.json"))
-CREDENTIALS_FILE = Path(os.environ.get("GOOGLE_CREDENTIALS_FILE", "credentials.json"))
 
 server = Server("google-docs-mcp")
 
@@ -35,26 +33,25 @@ server = Server("google-docs-mcp")
 # Auth helpers
 # ---------------------------------------------------------------------------
 
+_NOT_AUTHED_MSG = (
+    "Not authenticated. Run `python auth.py` first to sign in with your Google account "
+    "(works from your phone — no desktop browser needed), then restart the MCP server."
+)
+
+
 def get_credentials() -> Credentials:
-    """Load, refresh, or create OAuth2 credentials."""
-    creds = None
+    """Load saved credentials and refresh if expired. Raises if not authenticated."""
+    if not TOKEN_FILE.exists():
+        raise PermissionError(_NOT_AUTHED_MSG)
 
-    if TOKEN_FILE.exists():
-        creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
+    creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+    if not creds.valid:
+        if creds.expired and creds.refresh_token:
             creds.refresh(Request())
+            TOKEN_FILE.write_text(creds.to_json())
         else:
-            if not CREDENTIALS_FILE.exists():
-                raise FileNotFoundError(
-                    f"Google OAuth credentials file not found: {CREDENTIALS_FILE}\n"
-                    "Download it from Google Cloud Console → APIs & Services → Credentials."
-                )
-            flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_FILE), SCOPES)
-            creds = flow.run_local_server(port=0)
-
-        TOKEN_FILE.write_text(creds.to_json())
+            raise PermissionError(_NOT_AUTHED_MSG)
 
     return creds
 

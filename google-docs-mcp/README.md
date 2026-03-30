@@ -1,12 +1,13 @@
 # Google Docs MCP Server
 
-An MCP (Model Context Protocol) server that lets Claude create, read, and edit your Google Docs.
+An MCP (Model Context Protocol) server that lets Claude create, read, and edit
+your Google Docs — authenticated entirely from your phone, no desktop browser needed.
 
 ## Tools available
 
 | Tool | Description |
 |------|-------------|
-| `list_documents` | List your Google Docs, with optional search filter |
+| `list_documents` | List your Google Docs (with optional search) |
 | `create_document` | Create a new Google Doc with optional initial content |
 | `get_document` | Read the full text of a document |
 | `append_text` | Append text to the end of a document |
@@ -18,24 +19,24 @@ An MCP (Model Context Protocol) server that lets Claude create, read, and edit y
 
 ## Setup
 
-### 1. Enable the Google APIs
+### 1. Enable Google APIs (on your phone or any browser)
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/).
-2. Create a project (or select an existing one).
-3. Go to **APIs & Services → Library** and enable:
-   - **Google Docs API**
-   - **Google Drive API**
+1. Open [console.cloud.google.com](https://console.cloud.google.com).
+2. Create or select a project.
+3. **APIs & Services → Library** → enable **Google Docs API** and **Google Drive API**.
 
-### 2. Create OAuth 2.0 credentials
+### 2. Create OAuth credentials
 
-1. Go to **APIs & Services → Credentials**.
-2. Click **Create Credentials → OAuth client ID**.
-3. Choose **Desktop app**, give it a name, and click **Create**.
-4. Download the JSON file and save it as `credentials.json` in this directory
-   (or set `GOOGLE_CREDENTIALS_FILE` to its path).
+1. **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
+2. Choose the client type based on which auth method you prefer:
 
-> **First run**: A browser window will open for you to log in and grant access.
-> The token is saved to `~/.google_docs_mcp_token.json` for reuse.
+   | Method | Client type to choose | Experience |
+   |--------|-----------------------|------------|
+   | **Device flow** (recommended) | `TVs and Limited Input devices` | Short code shown in terminal → enter on phone, tap your account. No paste needed. |
+   | **Console flow** | `Desktop app` | URL printed in terminal → open on phone, approve, paste the short code back. |
+
+3. Download the JSON file and save it as `credentials.json` in this folder
+   (or anywhere — just set `GOOGLE_CREDENTIALS_FILE` to its path).
 
 ### 3. Install dependencies
 
@@ -43,26 +44,48 @@ An MCP (Model Context Protocol) server that lets Claude create, read, and edit y
 pip install -r requirements.txt
 ```
 
-### 4. Configure Claude Code
+### 4. Authenticate (one-time, from your phone)
 
-Add this server to your Claude Code MCP config. Edit `~/.claude/mcp.json`
-(or `claude_desktop_config.json` for the desktop app):
+Run the auth script once. It will never open a browser on your machine.
+
+**Device flow** (recommended — no copy-paste):
+```bash
+python auth.py --method device --credentials credentials.json
+```
+```
+======================================================
+  Open on your phone : https://google.com/device
+  Enter this code    : XXXX-XXXX
+======================================================
+Waiting for you to approve on your phone...
+```
+Open `https://google.com/device` on your phone, enter the code, and tap your Google account. Done.
+
+**Console flow** (if you used Desktop app credentials):
+```bash
+python auth.py --method console --credentials credentials.json
+```
+Paste the URL into your phone's browser, approve, then paste the code back into the terminal.
+
+The token is saved to `~/.google_docs_mcp_token.json`. Future runs (and token refreshes)
+are automatic — you won't need to re-authenticate unless you revoke access.
+
+### 5. Configure Claude Code
+
+Add this to `~/.claude/mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "google-docs": {
       "command": "python",
-      "args": ["/absolute/path/to/google-docs-mcp/server.py"],
-      "env": {
-        "GOOGLE_CREDENTIALS_FILE": "/absolute/path/to/google-docs-mcp/credentials.json"
-      }
+      "args": ["/absolute/path/to/google-docs-mcp/server.py"]
     }
   }
 }
 ```
 
-Restart Claude Code after editing the config.
+Restart Claude Code. The server uses the saved token automatically.
 
 ---
 
@@ -70,21 +93,30 @@ Restart Claude Code after editing the config.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GOOGLE_CREDENTIALS_FILE` | `credentials.json` (current dir) | Path to your OAuth client JSON |
+| `GOOGLE_CREDENTIALS_FILE` | `credentials.json` | Path to your OAuth client JSON |
 | `GOOGLE_TOKEN_FILE` | `~/.google_docs_mcp_token.json` | Where the access token is stored |
+
+---
+
+## Re-authenticating
+
+If you ever need to re-auth (e.g. you revoked access):
+```bash
+python auth.py --method device --credentials credentials.json
+```
 
 ---
 
 ## Usage examples
 
-Once connected, you can ask Claude things like:
+Once connected, ask Claude things like:
 
 - *"List my recent Google Docs"*
-- *"Create a new doc called 'Meeting Notes' with today's agenda"*
-- *"Read the doc with ID `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms`"*
-- *"Append a summary section to my doc"*
-- *"Replace all occurrences of 'Q3' with 'Q4' in the report doc"*
-- *"Overwrite the draft doc with this new version"*
+- *"Create a doc called 'Meeting Notes' with today's agenda"*
+- *"Read the document with ID `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms`"*
+- *"Append a summary section to my report doc"*
+- *"Replace 'Q3' with 'Q4' everywhere in the budget doc"*
+- *"Search my docs for anything about the project proposal"*
 
-The document ID is the long string in a Google Docs URL:
+The document ID is the string in a Google Docs URL:
 `https://docs.google.com/document/d/**<document_id>**/edit`
